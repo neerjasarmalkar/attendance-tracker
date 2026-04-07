@@ -12,7 +12,6 @@ import math
 # Load local .env if it exists
 load_dotenv()
 
-# For Vercel root deployment, templates are in the same directory by default
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "supersecretkey")
 
@@ -20,14 +19,14 @@ app.secret_key = os.environ.get("SECRET_KEY", "supersecretkey")
 # 🔹 Database Configuration
 # ==============================
 def get_db_connection():
-    """Helper to get a fresh connection for every request (best for serverless)."""
+    """Helper to get a fresh connection for every request."""
     return mysql.connector.connect(
         host=os.environ.get('MYSQL_HOST', 'localhost'),
         user=os.environ.get('MYSQL_USER', 'root'),
         password=os.environ.get('MYSQL_PASSWORD', ''),
         database=os.environ.get('MYSQL_DB', 'tracker'),
         port=int(os.environ.get('MYSQL_PORT', 3306)),
-        # Standard SSL for TiDB Serverless
+        # SSL is necessary for TiDB Cloud
         ssl_disabled=False
     )
 
@@ -310,4 +309,6 @@ def dashboardd():
     return render_template("index.html", user=session["user"], total_students=total_students)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Standard Flask run, but we will use Gunicorn in Docker
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
