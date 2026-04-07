@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Student Attendance</title>
+
+    <style>
+        body {
+            font-family: Arial;
+            background: #020617;
+            color: white;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .container {
+            background: #1e293b;
+            padding: 25px;
+            border-radius: 12px;
+            width: 350px;
+            margin: auto;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            border-radius: 8px;
+            border: none;
+            background: #3b82f6;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #2563eb;
+        }
+
+        p {
+            margin: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h2>👨‍🎓 Student Attendance</h2>
+
+        <!-- FORM -->
+        <form method="POST" action="/student_verify" id="attendanceForm">
+
+            <!-- Hidden coordinates -->
+            <input type="hidden" id="latInput" name="latitude">
+            <input type="hidden" id="lngInput" name="longitude">
+
+            <input type="text" id="codeInput" name="nonce_code" placeholder="Enter 5-character code"
+                style="padding: 10px; width: 80%; border-radius: 6px; border: 1px solid #ccc; margin-bottom: 10px; text-align: center; color: black;"
+                maxlength="5" required>
+            <br>
+
+            <button type="button" onclick="getLocation()" style="width: 80%;">Verify Code & Location</button>
+
+        </form>
+
+        <p id="status">Status: Waiting for verification...</p>
+
+    </div>
+
+    <script>
+        function getLocation() {
+            let codeInput = document.getElementById("codeInput").value.trim();
+
+            if (!codeInput) {
+                alert("Please enter the attendance code.");
+                return;
+            }
+
+            document.getElementById("status").innerText = "Status: Verifying Location... ⏳";
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    let studentLat = position.coords.latitude;
+                    let studentLng = position.coords.longitude;
+
+                    document.getElementById("latInput").value = studentLat;
+                    document.getElementById("lngInput").value = studentLng;
+
+                    document.getElementById("status").innerText = "Status: Submitting to server... ⏳";
+                    document.getElementById("attendanceForm").submit();
+
+                }, (error) => {
+                    alert("Location error: " + error.message);
+                    document.getElementById("status").innerText = "Status: Location Error ❌";
+                }, {
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 10000
+                });
+            } else {
+                alert("Geolocation not supported");
+                document.getElementById("status").innerText = "Status: Location Not Supported ❌";
+            }
+        }
+    </script>
+
+</body>
+
+</html>

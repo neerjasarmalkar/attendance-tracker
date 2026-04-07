@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Attendance Tracker</title>
+
+<style>
+/* Background */
+body {
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+    background: radial-gradient(circle at top, #0f2027, #203a43, #2c5364);
+    color: white;
+    overflow-x: hidden;
+}
+
+/* Header */
+header {
+    text-align: center;
+    padding: 20px;
+    font-size: 26px;
+    letter-spacing: 2px;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 0 20px rgba(0,255,255,0.4);
+}
+
+/* Layout */
+.container {
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+}
+
+/* Panels */
+.left, .right {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(0,255,255,0.2);
+    backdrop-filter: blur(15px);
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 0 25px rgba(0,255,255,0.2);
+    transition: 0.4s;
+}
+
+.left:hover, .right:hover {
+    transform: scale(1.02);
+    box-shadow: 0 0 35px rgba(0,255,255,0.5);
+}
+
+/* Camera */
+video {
+    width: 100%;
+    border-radius: 12px;
+    border: 3px solid cyan;
+    box-shadow: 0 0 20px cyan;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 10px cyan; }
+    50% { box-shadow: 0 0 25px cyan; }
+    100% { box-shadow: 0 0 10px cyan; }
+}
+
+/* Captured Image */
+img {
+    width: 100%;
+    margin-top: 10px;
+    border-radius: 10px;
+    border: 2px solid #00f2fe;
+    box-shadow: 0 0 15px #00f2fe;
+}
+
+/* Buttons */
+button {
+    padding: 10px 18px;
+    margin: 6px;
+    border: none;
+    border-radius: 25px;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    background: linear-gradient(45deg, #00f2fe, #4facfe);
+    box-shadow: 0 0 10px #00f2fe;
+    transition: 0.3s;
+}
+
+button:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 20px #00f2fe;
+}
+
+/* Table */
+table {
+    width: 100%;
+    margin-top: 15px;
+    border-collapse: collapse;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+th {
+    background: linear-gradient(45deg, #00f2fe, #4facfe);
+    padding: 10px;
+}
+
+td {
+    padding: 10px;
+    text-align: center;
+    background: rgba(255,255,255,0.1);
+}
+
+tr:hover td {
+    background: rgba(0,255,255,0.2);
+}
+
+/* Image Thumbnail */
+img.thumb {
+    width: 70px;
+    height: 50px;
+    border-radius: 5px;
+}
+
+/* Info boxes */
+p {
+    background: rgba(0,0,0,0.4);
+    padding: 8px;
+    border-radius: 6px;
+    margin: 5px 0;
+    border-left: 3px solid cyan;
+}
+
+/* Scroll table */
+.right table {
+    display: block;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+/* Time */
+#dateTime {
+    font-size: 14px;
+    color: #ccc;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+     Attendance Tracker
+    <div id="dateTime"></div>
+</header>
+
+<div class="container">
+
+<!-- LEFT -->
+<div class="left">
+    <h2>Camera</h2>
+    <video id="video" autoplay playsinline></video>
+
+
+
+    <button onclick="startCamera()">Start Camera</button>
+    <button onclick="captureAndRecognize()">Capture</button>
+    <button onclick="stopCamera()">Stop Camera</button>
+
+    <h3>Detected Student</h3>
+    <canvas id="canvas" style="display:none;"></canvas>
+    <img id="capturedImage">
+
+    <p>Name:<span id="name"> ---</span></p>
+    <p>Roll No: <span id="roll">---</span></p>
+    <p>Department: <span id="department">---</span></p>
+    <p>Division: <span id="division">---</span></p>
+</div>
+
+<!-- RIGHT -->
+<div class="right">
+    <h2>Attendance</h2>
+    <button onclick="markAttendance()">Mark Attendance</button>
+
+    <table id="attendanceTable">
+        <tr>
+            <th>Captured Image</th>
+            <th>Name</th>
+            <th>Roll No</th>
+            <th>Department</th>
+            <th>Division</th>
+            <th>Time</th>
+            <th>Status</th>
+        </tr>
+    </table>
+
+    <h3>Statistics</h3>
+    <p>Total Students: <span id="totalStudents">{{ total_students }}</span></p>
+    <p>Present Today: <span id="presentCount">0</span></p>
+    <p>Absent Today: <span id="absentCount">0</span></p>
+
+    <button onclick="downloadReport()">Download Report</button>
+</div>
+
+</div>
+
+<script>
+function updateTime() {
+    document.getElementById("dateTime").innerText =
+        new Date().toLocaleString();
+}
+setInterval(updateTime, 1000);
+
+let video = document.getElementById("video");
+let canvas = document.getElementById("canvas");
+let capturedImage = document.getElementById("capturedImage");
+let table = document.getElementById("attendanceTable");
+let stream = null;
+
+async function startCamera() {
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        video.srcObject = stream;
+    } catch (err) {
+        alert("Camera Error: " + err.message);
+    }
+}
+
+function stopCamera() {
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+        stream = null;
+    }
+}
+
+function captureAndRecognize() {
+
+    let ctx = canvas.getContext("2d");
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    ctx.drawImage(video, 0, 0);
+
+    let imageData = canvas.toDataURL("image/jpeg");
+    capturedImage.src = imageData;
+
+    fetch("/recognize_face", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ image: imageData })
+    })
+    .then(res => res.text())
+    .then(data => {
+
+        if (data === "NOT_FOUND") {
+            document.getElementById("name").innerText = "Not Found";
+            document.getElementById("roll").innerText = "---";
+            document.getElementById("department").innerText = "---";
+            document.getElementById("division").innerText = "---";
+        } else {
+            let parts = data.split("|");
+
+            document.getElementById("name").innerText = parts[0];
+            document.getElementById("roll").innerText = parts[1];
+            document.getElementById("department").innerText = parts[2];
+            document.getElementById("division").innerText = parts[3];
+        }
+
+    });
+}
+
+let presentCount = 0;
+
+function markAttendance() {
+    let name = document.getElementById("name").innerText;
+    let roll = document.getElementById("roll").innerText;
+    let department = document.getElementById("department").innerText;
+    let division = document.getElementById("division").innerText;
+    let imgSrc = document.getElementById("capturedImage").src;
+    let time = new Date().toLocaleTimeString();
+
+    if (name === " ---" || name.includes("Not Found") || name.includes("Face Not Matched") || name.includes("No Face Detected") || name.includes("Invalid Image")) {
+        alert("Please capture and recognize a valid face first!");
+        return;
+    }
+
+    // Prevent duplicate marking
+    let rows = table.getElementsByTagName("tr");
+    for(let i = 1; i < rows.length; i++) {
+        if(rows[i].cells[2].innerText === roll) {
+            alert("Attendance already marked for " + name);
+            return;
+        }
+    }
+
+    let newRow = table.insertRow(-1);
+    
+    let cell1 = newRow.insertCell(0);
+    let cell2 = newRow.insertCell(1);
+    let cell3 = newRow.insertCell(2);
+    let cell4 = newRow.insertCell(3);
+    let cell5 = newRow.insertCell(4);
+    let cell6 = newRow.insertCell(5);
+    let cell7 = newRow.insertCell(6);
+
+    cell1.innerHTML = `<img src="${imgSrc}" class="thumb">`;
+    cell2.innerText = name;
+    cell3.innerText = roll;
+    cell4.innerText = department;
+    cell5.innerText = division;
+    cell6.innerText = time;
+    cell7.innerText = "Present";
+    cell7.style.color = "#00ffcc";
+    cell7.style.fontWeight = "bold";
+
+    presentCount++;
+    document.getElementById("presentCount").innerText = presentCount;
+    updateStats();
+}
+
+function updateStats() {
+    let total = parseInt(document.getElementById("totalStudents").innerText) || 0;
+    let absent = total - presentCount;
+    if (absent < 0) absent = 0;
+    document.getElementById("absentCount").innerText = absent;
+}
+
+function downloadReport() {
+    let table = document.getElementById("attendanceTable");
+    let rows = table.getElementsByTagName("tr");
+    let csvContent = "data:text/csv;charset=utf-8,";
+    
+    // Add headers
+    let headers = [];
+    let headerCells = rows[0].getElementsByTagName("th");
+    for(let i = 0; i < headerCells.length; i++) {
+        if(i === 0) {
+            headers.push("Image");
+        } else {
+            headers.push(headerCells[i].innerText);
+        }
+    }
+    csvContent += headers.join(",") + "\n";
+    
+    // Add data rows
+    for(let i = 1; i < rows.length; i++) {
+        let cells = rows[i].getElementsByTagName("td");
+        let rowData = [];
+        for(let j = 0; j < cells.length; j++) {
+            if(j === 0) {
+                rowData.push("[Image Data]");
+            } else {
+                rowData.push(cells[j].innerText);
+            }
+        }
+        csvContent += rowData.join(",") + "\n";
+    }
+    
+    // Add statistics
+    csvContent += "\n\nStatistics\n";
+    csvContent += "Total Students," + document.getElementById("totalStudents").innerText + "\n";
+    csvContent += "Present Today," + document.getElementById("presentCount").innerText + "\n";
+    csvContent += "Absent Today," + document.getElementById("absentCount").innerText + "\n";
+    
+    // Create download link
+    let encodedUri = encodeURI(csvContent);
+    let link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "Attendance_Report_" + new Date().toLocaleString().replace(/[\/\s:,]/g, "_") + ".csv");
+    document.body.appendChild(link);
+    
+    // Trigger download
+    link.click();
+    document.body.removeChild(link);
+}
+</script>
+
+</body>
+</html>

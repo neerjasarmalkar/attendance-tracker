@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Attendance + Live Location</title>
+
+    <style>
+        body {
+            font-family: Arial;
+            background: #0f172a;
+            color: white;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .container {
+            background: #1e293b;
+            padding: 25px;
+            border-radius: 12px;
+            width: 350px;
+            margin: auto;
+        }
+
+        input,
+        button {
+            padding: 10px;
+            margin: 10px;
+            border-radius: 6px;
+            border: none;
+        }
+
+        button {
+            background: #22c55e;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #16a34a;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h2>Teacher Dashboard</h2>
+
+        {% if teacher_nonce %}
+        <div style="background: #334155; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <h3 style="margin: 0; color: #38bdf8; font-size: 16px;">Attendance Code</h3>
+            <h1 style="margin: 5px 0 0 0; font-size: 32px; letter-spacing: 4px;">{{ teacher_nonce }}</h1>
+        </div>
+        {% endif %}
+
+        <form method="POST" action="/save_teacher_location">
+
+            <input type="text" name="nonce_code" placeholder="Custom Attendance Code (Optional)" style="padding: 10px; margin: 10px; border-radius: 6px; border: none; text-align: center; color: black; width: 80%;" maxlength="5">
+            <br>
+            <input type="number" id="attendance" name="total_students" placeholder="Enter Total Attendance">
+
+            <!-- 🔥 NEW: store latitude & longitude -->
+            <input type="hidden" id="latInput" name="latitude">
+            <input type="hidden" id="lngInput" name="longitude">
+
+            <br>
+
+            <button type="button" onclick="getLocation()">Get Live Location</button>
+            <button type="submit" id="saveBtn" disabled style="background: gray;">Wait for Location...</button>
+
+        </form>
+
+        <p>📍 Latitude: <span id="lat">---</span></p>
+        <p>📍 Longitude: <span id="lng">---</span></p>
+
+    </div>
+
+    <script>
+
+        // 📍 Get location
+        function getLocation() {
+
+            if (navigator.geolocation) {
+
+                navigator.geolocation.getCurrentPosition(position => {
+
+                    let lat = position.coords.latitude;
+                    let lng = position.coords.longitude;
+
+                    // Show on screen
+                    document.getElementById("lat").innerText = lat;
+                    document.getElementById("lng").innerText = lng;
+
+                    // 🔥 Store in hidden inputs (IMPORTANT)
+                    document.getElementById("latInput").value = lat;
+                    document.getElementById("lngInput").value = lng;
+
+                    // Enable the SAVE button
+                    let saveBtn = document.getElementById("saveBtn");
+                    saveBtn.disabled = false;
+                    saveBtn.innerText = "Save";
+                    saveBtn.style.background = "#22c55e"; // Set back to green
+
+                }, (error) => {
+                    alert("Location error: " + error.message);
+                }, {
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 10000
+                });
+
+            } else {
+                alert("Geolocation not supported");
+            }
+        }
+
+    </script>
+
+</body>
+
+</html>
