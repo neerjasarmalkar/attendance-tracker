@@ -25,8 +25,11 @@ WORKDIR /app
 # Copy the requirements file into the container
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies using only ONE thread to save memory
+# This avoids the "Out of Memory" crash on Render
+RUN MAKEFLAGS="-j 1" pip install --no-cache-dir dlib==19.24.1 && \
+    pip install --no-cache-dir face_recognition && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code into the container
 COPY . .

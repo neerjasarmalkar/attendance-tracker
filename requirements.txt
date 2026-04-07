@@ -3,6 +3,5 @@ mysql-connector-python
 werkzeug
 opencv-python-headless
 numpy
-face_recognition
 python-dotenv
 gunicorn
