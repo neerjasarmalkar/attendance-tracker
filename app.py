@@ -1,23 +1,31 @@
-from flask import Flask, render_template, request, redirect, url_for, session
-from flask_mysqldb import MySQL
+import os
+import mysql.connector
+from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
 import cv2
 import numpy as np
 import face_recognition
 
+# Load local .env if it exists
+load_dotenv()
+
 app = Flask(__name__)
-app.secret_key = "supersecretkey"
+app.secret_key = os.environ.get("SECRET_KEY", "supersecretkey")
 
 # ==============================
-# 🔹 MySQL Configuration
+# 🔹 Database Configuration
 # ==============================
-app.config['MYSQL_HOST'] = 'localhost'
-app.config['MYSQL_USER'] = 'root'
-app.config['MYSQL_PASSWORD'] = ''
-app.config['MYSQL_DB'] = 'tracker'   # ✅ YOUR DB
-app.config['MYSQL_PORT'] = 3306
-
-mysql = MySQL(app)
+def get_db_connection():
+    """Helper to get a fresh connection for every request (best for serverless)."""
+    return mysql.connector.connect(
+        host=os.environ.get('MYSQL_HOST', 'localhost'),
+        user=os.environ.get('MYSQL_USER', 'root'),
+        password=os.environ.get('MYSQL_PASSWORD', ''),
+        database=os.environ.get('MYSQL_DB', 'tracker'),
+        port=int(os.environ.get('MYSQL_PORT', 3306)),
+        # Standard SSL for TiDB Serverless
+        ssl_disabled=False
+    )
 
 # ==============================
 # 🔹 SIGNUP
@@ -63,12 +71,14 @@ def signup():
         # convert encoding → string
         encoding_string = np.array2string(face_encoding)
 
-        cur = mysql.connection.cursor()
+        conn = get_db_connection()
+        cur = conn.cursor()
 
         # check duplicate email
         cur.execute("SELECT * FROM users WHERE email=%s", (email,))
         if cur.fetchone():
             cur.close()
+            conn.close()
             return "User already exists"
 
         # check duplicate face
@@ -81,6 +91,7 @@ def signup():
                 distance = face_recognition.face_distance([stored_encoding], face_encoding)
                 if distance[0] < 0.5:
                     cur.close()
+                    conn.close()
                     return "<script>alert('You have already signed up, please do login. or invalid photo'); window.location.href='/login';</script>"
 
         # insert
@@ -90,8 +101,9 @@ def signup():
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, (name, roll_no, email, hashed_password, image_data, encoding_string, role, department, div))
 
-        mysql.connection.commit()
+        conn.commit()
         cur.close()
+        conn.close()
 
         return redirect(url_for("login"))
 
@@ -113,12 +125,14 @@ def login():
         if not email or not password:
             return "Email or Password missing!"
 
-        cur = mysql.connection.cursor()
+        conn = get_db_connection()
+        cur = conn.cursor()
         cur.execute("SELECT id, name, roll_no, email, password, role FROM users WHERE email=%s", (email,))
         user = cur.fetchone()
 
         if not user:
             cur.close()
+            conn.close()
             return "User not found"
 
         # user indexes:
@@ -126,10 +140,12 @@ def login():
 
         if not check_password_hash(user[4], password):
             cur.close()
+            conn.close()
             return "Invalid Email or Password!"
         # 🔥 ROLE CHECK (IMPORTANT)
         if user[5] != role:
             cur.close()
+            conn.close()
             return "Please enter the correct role for it"
 
         # ✅ Login success
@@ -137,6 +153,7 @@ def login():
         session["role"] = user[5] if len(user) > 5 else "student"
 
         cur.close()
+        conn.close()
 
         return redirect(url_for("dashboard"))
 
@@ -149,24 +166,29 @@ def login():
 @app.route("/dashboard")
 def dashboard():
 
+    conn = get_db_connection()
+    cur = conn.cursor()
+
     if "user" in session:
         role = session.get("role", "student")
         if role == "teacher":
-            cur = mysql.connection.cursor()
             cur.execute("SELECT noncance FROM users WHERE name=%s", (session["user"],))
             result = cur.fetchone()
-            cur.close()
             teacher_nonce = result[0] if result and result[0] else None
+            cur.close()
+            conn.close()
             return render_template("teacher.html", user=session["user"], teacher_nonce=teacher_nonce)
         elif role == "student":
+            cur.close()
+            conn.close()
             return render_template("student.html", user=session["user"])
 
     # Fetch total_students from the latest teacher entry
-    cur = mysql.connection.cursor()
     cur.execute("SELECT Ttotal_student FROM users WHERE role='teacher' AND Ttotal_student IS NOT NULL ORDER BY id DESC LIMIT 1")
     result = cur.fetchone()
-    cur.close()
     total_students = result[0] if result else 0
+    cur.close()
+    conn.close()
         
     return render_template("index.html", total_students=total_students)
 
@@ -202,13 +224,15 @@ def recognize_face():
 
     live_encoding = encodings[0]
 
-    cur = mysql.connection.cursor()
+    conn = get_db_connection()
+    cur = conn.cursor()
 
     # 🔹 Fetch ALL users
     cur.execute("SELECT name, roll_no, face_encoding, department, Division FROM users")
     users = cur.fetchall()
 
     cur.close()
+    conn.close()
 
     # 🔥 Compare with each user
     for user in users:
@@ -268,7 +292,8 @@ def save_teacher_location():
         import random
         new_nonce = str(random.randint(10000, 99999))
 
-    cur = mysql.connection.cursor()
+    conn = get_db_connection()
+    cur = conn.cursor()
 
     cur.execute("""
         UPDATE users 
@@ -276,8 +301,9 @@ def save_teacher_location():
         WHERE name=%s
     """, (latitude, longitude, total_students, new_nonce, session["user"]))
 
-    mysql.connection.commit()
+    conn.commit()
     cur.close()
+    conn.close()
 
     # Redirect back to teacher dashboard instead of a blank text page
     return redirect(url_for("dashboard"))
@@ -296,10 +322,12 @@ def student_verify():
     if not student_lat or not student_lng or not student_code:
         return "<script>alert('Missing location or code!'); window.location.href='/dashboard';</script>"
 
-    cur = mysql.connection.cursor()
+    conn = get_db_connection()
+    cur = conn.cursor()
     cur.execute("SELECT Tlive_lat, Tlive_lng, noncance FROM users WHERE role='teacher' AND noncance IS NOT NULL AND noncance != '0' AND noncance != '' ORDER BY id DESC LIMIT 1")
     teacher_loc = cur.fetchone()
     cur.close()
+    conn.close()
 
     if not teacher_loc:
         return "<script>alert('Teacher hasn\\'t set location or code yet.'); window.location.href='/dashboard';</script>"
@@ -347,10 +375,12 @@ def dashboardd():
     if "user" not in session or session.get("role") != "student":
         return redirect(url_for("login"))
     
-    cur = mysql.connection.cursor()
+    conn = get_db_connection()
+    cur = conn.cursor()
     cur.execute("SELECT Ttotal_student FROM users WHERE role='teacher' AND Ttotal_student IS NOT NULL ORDER BY id DESC LIMIT 1")
     result = cur.fetchone()
     cur.close()
+    conn.close()
     total_students = result[0] if result else 0
     
     return render_template("index.html", user=session["user"], total_students=total_students)
